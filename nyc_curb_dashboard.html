@@ -1,0 +1,1004 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>NYC Neighborhood Curb Management Dashboard</title>
+
+<!-- Leaflet -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          "on-primary": "#ffffff",
+          "surface-variant": "#e4e2e2",
+          "primary-container": "#002f6c",
+          "on-primary-fixed-variant": "#224583",
+          "background": "#fbf9f8",
+          "secondary-container": "#75f8b3",
+          "surface-dim": "#dbd9d9",
+          "tertiary-container": "#412e00",
+          "secondary": "#006d43",
+          "surface-container": "#efeded",
+          "primary": "#001b44",
+          "surface-container-high": "#eae8e7",
+          "surface": "#fbf9f8",
+          "inverse-on-surface": "#f2f0f0",
+          "secondary-fixed": "#78fbb6",
+          "on-secondary": "#ffffff",
+          "surface-container-lowest": "#ffffff",
+          "error": "#ba1a1a",
+          "on-tertiary-fixed-variant": "#5c4300",
+          "on-secondary-container": "#007147",
+          "outline-variant": "#c4c6d2",
+          "inverse-primary": "#aec6ff",
+          "outline": "#747781",
+          "surface-container-highest": "#e4e2e2",
+          "surface-container-low": "#f5f3f3",
+          "on-error": "#ffffff",
+          "primary-fixed": "#d8e2ff",
+          "secondary-fixed-dim": "#59de9b",
+          "on-background": "#1b1c1c",
+          "on-surface-variant": "#434750",
+          "inverse-surface": "#303030",
+          "tertiary-fixed": "#ffdfa0",
+          "tertiary-fixed-dim": "#fbbc00",
+          "on-primary-container": "#7999dc",
+          "on-surface": "#1b1c1c",
+          "on-primary-fixed": "#001a42",
+          "error-container": "#ffdad6",
+          "on-error-container": "#93000a",
+        },
+        fontFamily: {
+          "headline": ["Manrope"],
+          "body": ["Inter"],
+          "label": ["Inter"]
+        },
+        borderRadius: { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" },
+      },
+    },
+  }
+</script>
+
+<style>
+  body { font-family: 'Inter', sans-serif; }
+  h1, h2, h3, h4 { font-family: 'Manrope', sans-serif; }
+  .material-symbols-outlined {
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    vertical-align: middle;
+  }
+  .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+  .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+  .custom-scrollbar::-webkit-scrollbar-thumb { background: #c4c6d2; border-radius: 10px; }
+
+  /* Leaflet overrides */
+  #map { z-index: 0; }
+  .leaflet-container { background: #e8eaf0; font-family: 'Inter', sans-serif; }
+  .leaflet-control-zoom a { font-family: 'Inter', sans-serif; }
+
+  /* Neighborhood polygon styles */
+  .neighborhood-layer { cursor: pointer; }
+
+  /* Panel slide-in */
+  #data-panel {
+    transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s ease;
+    transform: translateX(110%);
+    opacity: 0;
+    pointer-events: none;
+  }
+  #data-panel.open {
+    transform: translateX(0);
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  /* Progress bar animation */
+  .bar-fill {
+    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Loading spinner */
+  .spinner {
+    border: 3px solid rgba(0,27,68,0.1);
+    border-top-color: #001b44;
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Hover tooltip on map */
+  .leaflet-tooltip.hood-tooltip {
+    background: #001b44;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 10px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  }
+  .leaflet-tooltip.hood-tooltip::before { display: none; }
+
+  /* Pill badge */
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* Stat grid */
+  .stat-card {
+    background: #f5f3f3;
+    border-radius: 10px;
+    padding: 14px;
+  }
+
+  /* Fixed layer chip */
+  .layer-chip {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid #e4e2e2;
+  }
+  .layer-chip:last-child { border-bottom: none; }
+</style>
+</head>
+
+<body class="bg-background text-on-background flex h-screen overflow-hidden">
+
+<!-- ═══════════════════════════════════════════════════
+     SIDEBAR
+════════════════════════════════════════════════════ -->
+<aside class="w-64 bg-primary text-on-primary flex flex-col shrink-0">
+  <div class="p-6">
+    <div class="flex items-center gap-3 mb-1">
+      <div class="w-8 h-8 rounded-lg bg-primary-container flex items-center justify-center">
+        <span class="material-symbols-outlined text-on-primary-container" style="font-variation-settings:'FILL' 1;">local_shipping</span>
+      </div>
+      <h1 class="text-xl font-extrabold tracking-tight">INSIGHT</h1>
+    </div>
+    <p class="text-xs text-on-primary-container font-medium opacity-80">NYC Curb Intelligence</p>
+  </div>
+
+  <nav class="flex-1 px-4 space-y-2 mt-4">
+    <a class="flex items-center gap-3 px-4 py-3 rounded-xl bg-primary-container text-white" href="#">
+      <span class="material-symbols-outlined" style="font-variation-settings:'FILL' 1;">map</span>
+      <span class="font-medium">Curb Dashboard</span>
+    </a>
+    <a class="flex items-center gap-3 px-4 py-3 rounded-xl text-on-primary-container hover:bg-white/5 transition-colors" href="#">
+      <span class="material-symbols-outlined">analytics</span>
+      <span class="font-medium">Analytics</span>
+    </a>
+    <a class="flex items-center gap-3 px-4 py-3 rounded-xl text-on-primary-container hover:bg-white/5 transition-colors" href="#">
+      <span class="material-symbols-outlined">local_parking</span>
+      <span class="font-medium">Parking Policy</span>
+    </a>
+    <a class="flex items-center gap-3 px-4 py-3 rounded-xl text-on-primary-container hover:bg-white/5 transition-colors" href="#">
+      <span class="material-symbols-outlined">directions_bike</span>
+      <span class="font-medium">Bike Lanes</span>
+    </a>
+    <a class="flex items-center gap-3 px-4 py-3 rounded-xl text-on-primary-container hover:bg-white/5 transition-colors" href="#">
+      <span class="material-symbols-outlined">settings</span>
+      <span class="font-medium">Settings</span>
+    </a>
+  </nav>
+
+  <!-- Legend -->
+  <div class="mx-4 mb-4 bg-primary-container/60 rounded-xl p-4">
+    <p class="text-[10px] font-extrabold uppercase tracking-widest text-on-primary-container mb-3">Map Legend</p>
+    <div class="space-y-2">
+      <div class="flex items-center gap-2">
+        <div class="w-3 h-3 rounded-sm" style="background:#59de9b"></div>
+        <span class="text-[11px] text-on-primary-container">High free parking (&gt;65%)</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <div class="w-3 h-3 rounded-sm" style="background:#fbbc00"></div>
+        <span class="text-[11px] text-on-primary-container">Medium free parking</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <div class="w-3 h-3 rounded-sm" style="background:#e05252"></div>
+        <span class="text-[11px] text-on-primary-container">Low free parking (&lt;40%)</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <div class="w-3 h-3 rounded-sm bg-outline-variant"></div>
+        <span class="text-[11px] text-on-primary-container">No data</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="p-6 border-t border-white/10 flex items-center gap-3">
+    <div class="w-10 h-10 rounded-full bg-primary-container flex items-center justify-center">
+      <span class="material-symbols-outlined text-on-primary-container">person</span>
+    </div>
+    <div>
+      <p class="text-sm font-bold">Admin User</p>
+      <p class="text-[10px] text-on-primary-container uppercase tracking-wider">Super Admin</p>
+    </div>
+  </div>
+</aside>
+
+<!-- ═══════════════════════════════════════════════════
+     MAIN CONTENT
+════════════════════════════════════════════════════ -->
+<main class="flex-1 flex flex-col overflow-hidden">
+
+  <!-- Top Bar -->
+  <header class="h-16 bg-surface-container-lowest flex items-center justify-between px-8 border-b border-outline-variant/10 shrink-0">
+    <div class="flex items-center flex-1">
+      <div class="relative w-96">
+        <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm">search</span>
+        <input id="search-input" class="w-full pl-10 pr-4 py-2 bg-surface-container-low border-none rounded-full text-sm focus:ring-2 focus:ring-primary/20 outline-none" placeholder="Search NYC neighborhoods..." type="text"/>
+        <div id="search-results" class="hidden absolute top-full left-0 right-0 mt-1 bg-surface-container-lowest border border-outline-variant/20 rounded-xl shadow-xl z-50 max-h-64 overflow-y-auto custom-scrollbar"></div>
+      </div>
+    </div>
+    <div class="flex items-center gap-6">
+      <h2 class="text-sm font-bold text-primary mr-4">NYC Curb Usage Dashboard</h2>
+      <div class="flex items-center gap-4 border-l border-outline-variant/20 pl-6">
+        <button class="relative">
+          <span class="material-symbols-outlined text-on-surface-variant">notifications</span>
+        </button>
+        <button>
+          <span class="material-symbols-outlined text-on-surface-variant">help</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Map + Panel Container -->
+  <div class="flex-1 relative overflow-hidden">
+
+    <!-- Map -->
+    <div id="map" class="absolute inset-0"></div>
+
+    <!-- Map overlay top-right: loading indicator -->
+    <div id="loading-indicator" class="hidden absolute top-4 right-4 z-20 bg-surface-container-lowest/95 backdrop-blur px-4 py-3 rounded-xl shadow-lg flex items-center gap-3">
+      <div class="spinner"></div>
+      <span class="text-sm font-semibold text-primary">Loading neighborhood data…</span>
+    </div>
+
+    <!-- Map overlay top-left: prompt -->
+    <div id="map-prompt" class="absolute top-4 left-4 z-20 bg-primary/90 backdrop-blur px-5 py-3 rounded-xl shadow-lg flex items-center gap-3">
+      <span class="material-symbols-outlined text-secondary-fixed text-base">touch_app</span>
+      <span class="text-sm font-semibold text-on-primary">Click a neighborhood to explore curb usage</span>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════
+         DATA PANEL (slides in from right)
+    ════════════════════════════════════════════════════ -->
+    <div id="data-panel" class="absolute top-4 right-4 bottom-4 w-[400px] z-20 bg-surface-container-lowest rounded-xl shadow-2xl flex flex-col overflow-hidden border border-outline-variant/10">
+
+      <!-- Panel Header -->
+      <div class="bg-gradient-to-br from-primary to-primary-container p-5 relative overflow-hidden shrink-0">
+        <div class="absolute -right-6 -top-6 w-28 h-28 bg-white/5 rounded-full blur-2xl"></div>
+        <div class="flex justify-between items-start">
+          <div>
+            <p class="text-[10px] font-extrabold uppercase tracking-widest text-on-primary-container opacity-70 mb-1">Neighborhood</p>
+            <h3 id="panel-name" class="text-2xl font-extrabold text-white leading-tight">—</h3>
+          </div>
+          <button id="close-panel" class="p-1.5 bg-white/10 rounded-lg hover:bg-white/20 transition-colors">
+            <span class="material-symbols-outlined text-white text-sm">close</span>
+          </button>
+        </div>
+        <div class="mt-3 flex items-center gap-4">
+          <div>
+            <p class="text-[10px] text-on-primary-container opacity-60">Total Curb Miles</p>
+            <p id="panel-total-miles" class="text-lg font-extrabold text-white">—</p>
+          </div>
+          <div class="w-px h-8 bg-white/20"></div>
+          <div>
+            <p class="text-[10px] text-on-primary-container opacity-60">Fixed Use</p>
+            <p id="panel-fixed-pct" class="text-lg font-extrabold text-white">—</p>
+          </div>
+          <div class="w-px h-8 bg-white/20"></div>
+          <div>
+            <p class="text-[10px] text-on-primary-container opacity-60">Free Parking</p>
+            <p id="panel-free-pct" class="text-lg font-extrabold text-secondary-fixed">—</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Panel Body -->
+      <div class="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-5">
+
+        <!-- Curb Allocation Bar -->
+        <div>
+          <p class="text-[10px] font-extrabold uppercase tracking-widest text-on-surface-variant mb-3">Curb Allocation</p>
+          <div class="space-y-3">
+            <div>
+              <div class="flex justify-between text-xs font-semibold mb-1">
+                <span class="text-secondary">Free Parking</span>
+                <span id="alloc-free-pct" class="text-secondary">—</span>
+              </div>
+              <div class="h-3 bg-surface-container rounded-full overflow-hidden">
+                <div id="alloc-free-bar" class="bar-fill h-full bg-secondary-fixed-dim rounded-full" style="width:0%"></div>
+              </div>
+            </div>
+            <div>
+              <div class="flex justify-between text-xs font-semibold mb-1">
+                <span class="text-primary">Fixed Uses</span>
+                <span id="alloc-fixed-pct" class="text-primary">—</span>
+              </div>
+              <div class="h-3 bg-surface-container rounded-full overflow-hidden">
+                <div id="alloc-fixed-bar" class="bar-fill h-full bg-primary rounded-full" style="width:0%"></div>
+              </div>
+            </div>
+            <div>
+              <div class="flex justify-between text-xs font-semibold mb-1">
+                <span class="text-on-surface-variant">Metered Parking (avg)</span>
+                <span id="alloc-metered-pct" class="text-on-surface-variant">—</span>
+              </div>
+              <div class="h-3 bg-surface-container rounded-full overflow-hidden">
+                <div id="alloc-metered-bar" class="bar-fill h-full bg-tertiary-fixed-dim rounded-full" style="width:0%"></div>
+              </div>
+            </div>
+            <div>
+              <div class="flex justify-between text-xs font-semibold mb-1">
+                <span class="text-error">No Parking (avg)</span>
+                <span id="alloc-nopark-pct" class="text-error">—</span>
+              </div>
+              <div class="h-3 bg-surface-container rounded-full overflow-hidden">
+                <div id="alloc-nopark-bar" class="bar-fill h-full bg-error rounded-full" style="width:0%"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Weekday vs Weekend -->
+        <div>
+          <p class="text-[10px] font-extrabold uppercase tracking-widest text-on-surface-variant mb-3">Weekday vs Weekend</p>
+          <div class="grid grid-cols-2 gap-3">
+            <div class="stat-card">
+              <p class="text-[10px] font-bold uppercase text-on-surface-variant mb-2">Weekday</p>
+              <div class="space-y-1.5">
+                <div class="flex justify-between text-xs">
+                  <span class="text-on-surface-variant">Free</span>
+                  <span id="wd-free" class="font-bold text-secondary">—</span>
+                </div>
+                <div class="flex justify-between text-xs">
+                  <span class="text-on-surface-variant">Metered</span>
+                  <span id="wd-metered" class="font-bold text-primary">—</span>
+                </div>
+                <div class="flex justify-between text-xs">
+                  <span class="text-on-surface-variant">No Park</span>
+                  <span id="wd-nopark" class="font-bold text-error">—</span>
+                </div>
+              </div>
+            </div>
+            <div class="stat-card">
+              <p class="text-[10px] font-bold uppercase text-on-surface-variant mb-2">Weekend</p>
+              <div class="space-y-1.5">
+                <div class="flex justify-between text-xs">
+                  <span class="text-on-surface-variant">Free</span>
+                  <span id="we-free" class="font-bold text-secondary">—</span>
+                </div>
+                <div class="flex justify-between text-xs">
+                  <span class="text-on-surface-variant">Metered</span>
+                  <span id="we-metered" class="font-bold text-primary">—</span>
+                </div>
+                <div class="flex justify-between text-xs">
+                  <span class="text-on-surface-variant">No Park</span>
+                  <span id="we-nopark" class="font-bold text-error">—</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Peak Times -->
+        <div>
+          <p class="text-[10px] font-extrabold uppercase tracking-widest text-on-surface-variant mb-3">Peak Constraint Times</p>
+          <div class="space-y-2">
+            <div class="stat-card flex justify-between items-center">
+              <div>
+                <p class="text-[10px] font-bold uppercase text-on-surface-variant">Most Constrained</p>
+                <p id="peak-constrained-time" class="text-sm font-extrabold text-primary mt-0.5">—</p>
+              </div>
+              <div class="text-right">
+                <p class="text-[10px] text-on-surface-variant">Min Free</p>
+                <p id="peak-constrained-pct" class="text-sm font-bold text-error">—</p>
+              </div>
+            </div>
+            <div class="stat-card flex justify-between items-center">
+              <div>
+                <p class="text-[10px] font-bold uppercase text-on-surface-variant">Most Available</p>
+                <p id="peak-free-time" class="text-sm font-extrabold text-primary mt-0.5">—</p>
+              </div>
+              <div class="text-right">
+                <p class="text-[10px] text-on-surface-variant">Max Free</p>
+                <p id="peak-free-pct" class="text-sm font-bold text-secondary">—</p>
+              </div>
+            </div>
+            <div class="stat-card flex justify-between items-center">
+              <div>
+                <p class="text-[10px] font-bold uppercase text-on-surface-variant">Peak Metered</p>
+                <p id="peak-metered-time" class="text-sm font-extrabold text-primary mt-0.5">—</p>
+              </div>
+              <div class="text-right">
+                <p class="text-[10px] text-on-surface-variant">Miles</p>
+                <p id="peak-metered-val" class="text-sm font-bold text-on-surface-variant">—</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Fixed Layers Breakdown -->
+        <div>
+          <p class="text-[10px] font-extrabold uppercase tracking-widest text-on-surface-variant mb-3">Fixed Curb Layers</p>
+          <div class="bg-surface-container-low rounded-xl px-4 py-2">
+            <div class="layer-chip">
+              <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-sm text-primary">directions_bike</span>
+                <span class="text-xs font-semibold">Bike Lane</span>
+              </div>
+              <div class="text-right">
+                <span id="fl-bike-mi" class="text-xs font-bold text-primary">—</span>
+                <span id="fl-bike-pct" class="text-[10px] text-on-surface-variant ml-1">—</span>
+              </div>
+            </div>
+            <div class="layer-chip">
+              <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-sm text-primary">directions_bus</span>
+                <span class="text-xs font-semibold">Bus Lane</span>
+              </div>
+              <div class="text-right">
+                <span id="fl-bus-mi" class="text-xs font-bold text-primary">—</span>
+                <span id="fl-bus-pct" class="text-[10px] text-on-surface-variant ml-1">—</span>
+              </div>
+            </div>
+            <div class="layer-chip">
+              <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-sm text-primary">bus_alert</span>
+                <span class="text-xs font-semibold">Bus Stop</span>
+              </div>
+              <div class="text-right">
+                <span id="fl-busstop-mi" class="text-xs font-bold text-primary">—</span>
+                <span id="fl-busstop-pct" class="text-[10px] text-on-surface-variant ml-1">—</span>
+              </div>
+            </div>
+            <div class="layer-chip">
+              <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-sm text-primary">pedal_bike</span>
+                <span class="text-xs font-semibold">Citi Bike</span>
+              </div>
+              <div class="text-right">
+                <span id="fl-citibike-mi" class="text-xs font-bold text-primary">—</span>
+                <span id="fl-citibike-pct" class="text-[10px] text-on-surface-variant ml-1">—</span>
+              </div>
+            </div>
+            <div class="layer-chip">
+              <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-sm text-primary">local_fire_department</span>
+                <span class="text-xs font-semibold">Fire Hydrant</span>
+              </div>
+              <div class="text-right">
+                <span id="fl-hydrant-mi" class="text-xs font-bold text-primary">—</span>
+                <span id="fl-hydrant-pct" class="text-[10px] text-on-surface-variant ml-1">—</span>
+              </div>
+            </div>
+            <div class="layer-chip">
+              <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-sm text-primary">accessible</span>
+                <span class="text-xs font-semibold">Curb Cut</span>
+              </div>
+              <div class="text-right">
+                <span id="fl-curbcut-mi" class="text-xs font-bold text-primary">—</span>
+                <span id="fl-curbcut-pct" class="text-[10px] text-on-surface-variant ml-1">—</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- end panel body -->
+    </div><!-- end data-panel -->
+
+  </div><!-- end map+panel container -->
+</main>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════
+// CONFIGURATION — adjust these paths to match your local server setup
+// ═══════════════════════════════════════════════════════════════════════
+const CONFIG = {
+  geojsonPath: './neighborhood.geojson',
+
+  // GeoJSON property key that holds the neighborhood name
+  nameKey: 'neighborhood', // adjust if needed
+};
+
+const DATA = {
+  all: null,
+  byName: {},
+};
+
+async function loadCurbData() {
+  try {
+    const res = await fetch('./curb_all_neighborhoods.json');
+    if (!res.ok) throw new Error('Failed to load data');
+
+    const json = await res.json();
+
+    DATA.all = json.summaries;
+
+    // Build lookup map
+    json.summaries.forEach(d => {
+      DATA.byName[d.neighborhood] = d;
+    });
+
+    console.log('Data loaded:', DATA);
+  } catch (err) {
+    console.error('Error loading curb data:', err);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// MAP SETUP
+// ═══════════════════════════════════════════════════════════════════════
+const map = L.map('map', {
+  center: [40.7128, -74.006],
+  zoom: 10.25,
+  zoomControl: true,
+});
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+  attribution: '© OpenStreetMap contributors © CARTO',
+  subdomains: 'abcd',
+  maxZoom: 19,
+}).addTo(map);
+
+// ═══════════════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════════════
+let neighborhoodLayer = null;
+let selectedLayer = null;
+let allNeighborhoodNames = [];
+let dataCache = {}; // cache fetched JSON by neighborhood name
+
+// ═══════════════════════════════════════════════════════════════════════
+// COLOR SCALE based on avg_free_parking_pct
+// ═══════════════════════════════════════════════════════════════════════
+
+function normalizePct(val) {
+  if (val > 1) return val / 100;
+  return val;
+}
+
+function getColor(freePct) {
+  if (freePct === undefined || freePct === null) return '#c4c6d2';
+  if (freePct >= 65) return '#59de9b';
+  if (freePct >= 50) return '#8de8b5';
+  if (freePct >= 40) return '#fbbc00';
+  if (freePct >= 25) return '#f08030';
+  return '#e05252';
+}
+
+function styleFeature(feature) {
+  const pct = feature.properties._freePct;
+  return {
+    fillColor: pct !== undefined ? getColor(pct) : '#c4c6d2',
+    fillOpacity: 0.55,
+    color: '#001b44',
+    weight: 1,
+    opacity: 0.4,
+  };
+}
+
+function hoverStyle(feature) {
+  return {
+    fillOpacity: 0.75,
+    weight: 2,
+    opacity: 0.8,
+  };
+}
+
+function selectedStyle() {
+  return {
+    fillOpacity: 0.85,
+    weight: 3,
+    color: '#001b44',
+    opacity: 1,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// LOAD GEOJSON
+// ═══════════════════════════════════════════════════════════════════════
+async function loadGeoJSON() {
+  let geojsonData;
+  try {
+    const res = await fetch(CONFIG.geojsonPath);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    geojsonData = await res.json();
+  } catch (err) {
+    console.error('Failed to load GeoJSON:', err);
+    showMapError('Could not load neighborhood boundaries. Check CONFIG.geojsonPath in the script.');
+    return;
+  }
+
+  // Pre-load free parking % from summary files for coloring (optional — can be slow for many hoods)
+  // For now we color grey and update on click. 
+  // To pre-color, you'd need to batch fetch all summaries.
+
+  neighborhoodLayer = L.geoJSON(geojsonData, {
+    style: styleFeature,
+    onEachFeature: onEachFeature,
+  }).addTo(map);
+
+  // Fit map to bounds
+  //map.fitBounds(neighborhoodLayer.getBounds(), { padding: [20, 20] });
+
+  // Collect neighborhood names for search
+  geojsonData.features.forEach(f => {
+    const name = getNeighborhoodName(f);
+    if (name) allNeighborhoodNames.push(name);
+  });
+  allNeighborhoodNames.sort();
+}
+
+function getNeighborhoodName(feature) {
+  // Try multiple common property keys
+  const props = feature.properties;
+  return props[CONFIG.nameKey]
+    || props['neighborhood']
+    || props['NTAName']
+    || props['ntaname']
+    || props['name']
+    || props['Name']
+    || props['NEIGHBORHOOD']
+    || null;
+}
+
+function onEachFeature(feature, layer) {
+  const name = getNeighborhoodName(feature);
+  if (!name) return;
+
+  // Tooltip on hover
+  layer.bindTooltip(name, {
+    className: 'hood-tooltip',
+    sticky: true,
+    offset: [10, 0],
+  });
+
+  layer.on({
+    mouseover: function (e) {
+      if (layer !== selectedLayer) {
+        layer.setStyle(hoverStyle(feature));
+        layer.bringToFront();
+      }
+    },
+    mouseout: function (e) {
+      if (layer !== selectedLayer) {
+        neighborhoodLayer.resetStyle(layer);
+      }
+    },
+    click: function (e) {
+      selectNeighborhood(layer, feature, name);
+    },
+  });
+}
+
+function enrichGeoJSON() {
+  if (!neighborhoodLayer || !DATA.byName) return;
+
+  neighborhoodLayer.eachLayer(layer => {
+    const name = getNeighborhoodName(layer.feature);
+    const d = DATA.byName[name];
+
+    if (!d) return;
+
+    // attach value used for coloring
+    layer.feature.properties._freePct = d.avg_free_parking_pct;
+
+    // apply color immediately
+    layer.setStyle({
+      fillColor: getColor(d.avg_free_parking_pct),
+    });
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// SELECT NEIGHBORHOOD
+// ═══════════════════════════════════════════════════════════════════════
+function selectNeighborhood(layer, feature, name) {
+  // Reset previous selection
+  if (selectedLayer && selectedLayer !== layer) {
+    neighborhoodLayer.resetStyle(selectedLayer);
+  }
+
+  selectedLayer = layer;
+  layer.setStyle(selectedStyle());
+  layer.bringToFront();
+
+  // 🔥 ADD THIS — zoom to clicked neighborhood
+  map.fitBounds(layer.getBounds(), {
+    padding: [40, 40],
+    maxZoom: 13,
+  });
+
+  // Hide prompt
+  document.getElementById('map-prompt').style.display = 'none';
+
+  // Open panel
+  openPanel(name);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// PANEL OPEN / CLOSE
+// ═══════════════════════════════════════════════════════════════════════
+function openPanel(name) {
+  const panel = document.getElementById('data-panel');
+  panel.classList.add('open');
+
+  // Set name immediately
+  document.getElementById('panel-name').textContent = name;
+
+  // Clear previous values
+  clearPanel();
+
+  // Load data
+  fetchNeighborhoodData(name);
+}
+
+function clearPanel() {
+  const ids = [
+    'panel-total-miles','panel-fixed-pct','panel-free-pct',
+    'alloc-free-pct','alloc-fixed-pct','alloc-metered-pct','alloc-nopark-pct',
+    'wd-free','wd-metered','wd-nopark',
+    'we-free','we-metered','we-nopark',
+    'peak-constrained-time','peak-constrained-pct','peak-free-time','peak-free-pct',
+    'peak-metered-time','peak-metered-val',
+    'fl-bike-mi','fl-bike-pct','fl-bus-mi','fl-bus-pct',
+    'fl-busstop-mi','fl-busstop-pct','fl-citibike-mi','fl-citibike-pct',
+    'fl-hydrant-mi','fl-hydrant-pct','fl-curbcut-mi','fl-curbcut-pct',
+  ];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = '—';
+  });
+  // Reset bars
+  ['alloc-free-bar','alloc-fixed-bar','alloc-metered-bar','alloc-nopark-bar'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.width = '0%';
+  });
+}
+
+document.getElementById('close-panel').addEventListener('click', () => {
+  document.getElementById('data-panel').classList.remove('open');
+  if (selectedLayer) {
+    neighborhoodLayer.resetStyle(selectedLayer);
+    selectedLayer = null;
+  }
+  document.getElementById('map-prompt').style.display = 'flex';
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// FETCH NEIGHBORHOOD DATA
+// ═══════════════════════════════════════════════════════════════════════
+function fetchNeighborhoodData(name) {
+  const data = DATA.byName[name];
+
+  if (!data) {
+    console.warn('No data for', name);
+    document.getElementById('panel-name').textContent = name + ' (no data)';
+    return;
+  }
+
+  populatePanel(data);
+}
+
+function showLoading(show) {
+  const el = document.getElementById('loading-indicator');
+  if (show) {
+    el.classList.remove('hidden');
+    el.classList.add('flex');
+  } else {
+    el.classList.add('hidden');
+    el.classList.remove('flex');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// POPULATE PANEL WITH DATA
+// ═══════════════════════════════════════════════════════════════════════
+function pct(val) {
+  if (val === undefined || val === null) return '—';
+  return val.toFixed(1) + '%';
+}
+function mi(val) {
+  if (val === undefined || val === null) return '—';
+  return val.toFixed(2) + ' mi';
+}
+
+function populatePanel(d) {
+  // Header stats
+  setText('panel-total-miles', d.total_curb_miles ? d.total_curb_miles.toFixed(1) + ' mi' : '—');
+  setText('panel-fixed-pct', pct(d.total_fixed_pct));
+  setText('panel-free-pct', pct(d.avg_free_parking_pct));
+
+  // Allocation bars
+  setBar('free', d.avg_free_parking_pct);
+  setBar('fixed', d.total_fixed_pct);
+  setBar('metered', d.avg_metered_pct);
+  setBar('nopark', d.avg_no_parking_pct);
+
+  // Weekday
+  if (d.weekday) {
+    setText('wd-free', pct(d.weekday.avg_free_pct));
+    setText('wd-metered', pct(d.weekday.avg_metered_pct));
+    setText('wd-nopark', pct(d.weekday.avg_no_parking_pct));
+  }
+
+  // Weekend
+  if (d.weekend) {
+    setText('we-free', pct(d.weekend.avg_free_pct));
+    setText('we-metered', pct(d.weekend.avg_metered_pct));
+    setText('we-nopark', pct(d.weekend.avg_no_parking_pct));
+  }
+
+  // Peak times
+  setText('peak-constrained-time', d.most_constrained_time || '—');
+  setText('peak-constrained-pct', pct(d.min_free_parking_pct));
+  setText('peak-free-time', d.most_free_time || '—');
+  setText('peak-free-pct', pct(d.max_free_parking_pct));
+  setText('peak-metered-time', d.peak_metered_time || '—');
+  setText('peak-metered-val', d.peak_metered_miles ? d.peak_metered_miles.toFixed(2) + ' mi' : '—');
+
+  // Fixed layers
+  const fl = d.fixed_layers || {};
+  setFixedLayer('bike', fl.bike);
+  setFixedLayer('bus', fl.bus_lane);
+  setFixedLayer('busstop', fl.bus_stop);
+  setFixedLayer('citibike', fl.citibike);
+  setFixedLayer('hydrant', fl.hydrant);
+  setFixedLayer('curbcut', fl.curb_cut);
+
+  // Update map color for this neighborhood (if we have the layer)
+  updateNeighborhoodColor(d.neighborhood, d.avg_free_parking_pct);
+}
+
+function setText(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val;
+}
+
+function setBar(type, val) {
+  if (val === null || val === undefined) return;
+
+  // Detect if already in percentage
+  const pctValue = val;
+
+  const pct = pctValue.toFixed(1) + '%';
+
+  const pctEl = document.getElementById(`alloc-${type}-pct`);
+  const barEl = document.getElementById(`alloc-${type}-bar`);
+
+  if (pctEl) pctEl.textContent = pct;
+  if (barEl) barEl.style.width = pct;
+}
+
+function setFixedLayer(key, obj) {
+  const miEl = document.getElementById(`fl-${key}-mi`);
+  const pctEl = document.getElementById(`fl-${key}-pct`);
+  if (obj) {
+    if (miEl) miEl.textContent = (obj.miles || 0).toFixed(2) + ' mi';
+    if (pctEl) pctEl.textContent = '(' + (obj.pct || 0).toFixed(2) + '%)';
+  }
+}
+
+function updateNeighborhoodColor(name, freePct) {
+  if (!neighborhoodLayer || freePct === undefined) return;
+  neighborhoodLayer.eachLayer(layer => {
+    const n = getNeighborhoodName(layer.feature);
+    if (n === name) {
+      layer.feature.properties._freePct = freePct;
+      if (layer !== selectedLayer) {
+        layer.setStyle({ fillColor: getColor(freePct) });
+      }
+    }
+  });
+}
+
+
+function styleFeature(feature) {
+  return {
+    fillColor: getColor(feature.properties._freePct),
+    fillOpacity: 0.7,
+    color: '#001b44',
+    weight: 1,
+    opacity: 0.4,
+  };
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════
+// SEARCH
+// ═══════════════════════════════════════════════════════════════════════
+const searchInput = document.getElementById('search-input');
+const searchResults = document.getElementById('search-results');
+
+searchInput.addEventListener('input', function () {
+  const q = this.value.trim().toLowerCase();
+  if (!q) { searchResults.classList.add('hidden'); return; }
+
+  const matches = allNeighborhoodNames.filter(n => n.toLowerCase().includes(q)).slice(0, 10);
+  if (matches.length === 0) { searchResults.classList.add('hidden'); return; }
+
+  searchResults.innerHTML = matches.map(n => `
+    <div class="px-4 py-3 text-sm font-medium hover:bg-surface-container-low cursor-pointer transition-colors border-b border-outline-variant/10 last:border-0"
+         data-name="${n}">${n}</div>
+  `).join('');
+  searchResults.classList.remove('hidden');
+});
+
+searchResults.addEventListener('click', function (e) {
+  const item = e.target.closest('[data-name]');
+  if (!item) return;
+  const name = item.dataset.name;
+  searchInput.value = name;
+  searchResults.classList.add('hidden');
+  zoomToNeighborhood(name);
+});
+
+document.addEventListener('click', (e) => {
+  if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
+    searchResults.classList.add('hidden');
+  }
+});
+
+function zoomToNeighborhood(name) {
+  if (!neighborhoodLayer) return;
+  neighborhoodLayer.eachLayer(layer => {
+    const n = getNeighborhoodName(layer.feature);
+    if (n === name) {
+      map.fitBounds(layer.getBounds(), {
+        padding: [40, 40],
+        maxZoom: 15,
+      });
+      selectNeighborhood(layer, layer.feature, name);
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ERROR DISPLAY
+// ═══════════════════════════════════════════════════════════════════════
+function showMapError(msg) {
+  const el = document.createElement('div');
+  el.className = 'absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-error-container text-on-error-container px-6 py-4 rounded-xl shadow-lg text-sm font-semibold max-w-md text-center';
+  el.textContent = msg;
+  document.querySelector('.relative.flex-1').appendChild(el);
+}
+async function init() {
+  await Promise.all([loadGeoJSON(), loadCurbData()]);
+  enrichGeoJSON();
+}
+
+init();
+// ═══════════════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════════════
+//loadGeoJSON();
+//loadCurbData();
+
+</script>
+</body>
+</html>
