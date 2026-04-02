@@ -627,7 +627,21 @@ async function loadGeoJSON() {
   try {
     const res = await fetch(CONFIG.geojsonPath);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
     geojsonData = await res.json();
+
+    // ✅ FILTER HERE (after loading, before rendering)
+    const EXCLUDE = new Set([
+      "Central Park",
+      "Prospect Park",
+      "Battery Park"
+    ]);
+
+    geojsonData.features = geojsonData.features.filter(feature => {
+      const name = getNeighborhoodName(feature);
+      return !EXCLUDE.has(name);
+    });
+
   } catch (err) {
     console.error('Failed to load GeoJSON:', err);
     showMapError('Could not load neighborhood boundaries. Check CONFIG.geojsonPath in the script.');
