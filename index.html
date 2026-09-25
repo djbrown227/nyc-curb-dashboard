@@ -83,8 +83,22 @@
 
   /* Leaflet overrides */
   #map { z-index: 0; }
-  .leaflet-container { background: #e8eaf0; font-family: 'Inter', sans-serif; }
-  .leaflet-control-zoom a { font-family: 'Inter', sans-serif; }
+    .leaflet-container { 
+    background: #e8e9ed; 
+    font-family: 'Inter', sans-serif; 
+  }
+
+/* Muted cartographic basemap */
+.leaflet-tile-pane {
+  filter:
+    grayscale(90%)
+    brightness(1.12)
+    contrast(0.88);
+}
+
+.leaflet-control-zoom a { 
+  font-family: 'Inter', sans-serif; 
+}
 
   /* Neighborhood polygon styles */
   .neighborhood-layer { cursor: pointer; }
